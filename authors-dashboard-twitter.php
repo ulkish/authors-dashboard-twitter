@@ -73,3 +73,30 @@ function get_all_permalinks() {
 	print_r($all_permalinks);
 }
 // add_action('init', 'get_all_permalinks');
+
+// Adding rewrites. The code below only takes effect after flushing the
+// rewrite rules.
+add_action( 'init', 'test_rewrite_add_rewrites' );
+function test_rewrite_add_rewrites() {
+	add_rewrite_endpoint( 'stats', EP_PERMALINK );
+}
+
+add_action( 'template_redirect', 'test_rewrite_catch_stats' );
+function test_rewrite_catch_stats() {
+	if( is_singular() && get_query_var( 'stats' ) ) {
+	   $post = get_queried_object();
+		$out = array(
+			'title'     => $post->post_title,
+			'content'   => $post->post_content
+		);
+		header('Content-Type: text/plain');
+		print_r($out);
+		exit();
+	}
+}
+
+add_filter( 'request', 'test_rewrite_filter_request' );
+function test_rewrite_filter_request( $vars ) {
+	if( isset( $vars['stats'] ) ) $vars['stats'] = true;
+	return $vars;
+}
