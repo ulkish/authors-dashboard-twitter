@@ -31,27 +31,45 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // - Get data. [DONE]
 // - Display the data in a comprehensible way.
 
-// Loading the Twitter API wrapper.
+// Load the Twitter API wrapper.
 require_once('TwitterAPIExchange.php');
 
 $settings = array(
-	'oauth_access_token' => "1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0",
+	'oauth_access_token'        => "1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0",
 	'oauth_access_token_secret' => "tx4utCFkiByfIvrj7JIcgfrpPIjx9PN7hRsRVKAEyoUaQ",
-	'consumer_key' => "pHRdhG7rYPWGZ3TTkHecozPfa",
-	'consumer_secret' => "xU0AwSLGGcUrRIIp6zd46ovq3YtPCC8hcaj1gk1L36u74iJ5Jk"
+	'consumer_key'              => "pHRdhG7rYPWGZ3TTkHecozPfa",
+	'consumer_secret'           => "xU0AwSLGGcUrRIIp6zd46ovq3YtPCC8hcaj1gk1L36u74iJ5Jk"
 );
 
+// Creating a request.
+$url            = 'https://api.twitter.com/1.1/search/tweets.json';
+$get_field      = '?q=http%3A%2F%2Flocalhost%2Ftestinginstall%2Ftest-post-3%2F&src=typed_query';
+$request_method = 'GET';
+// $twitter       = new TwitterAPIExchange($settings);
+// $jsonraw       =  $twitter->setGetfield($get_field)
+// 						  ->buildOauth($url, $request_method)
+// 					 	  ->performRequest();
+// $json = json_decode( $jsonraw, true );
 
-$url           = 'https://api.twitter.com/1.1/search/tweets.json';
-$getfield      = '?q=from%3Atwitterdev&result_type=mixed&count=2';
-$requestMethod = 'GET';
-$twitter       = new TwitterAPIExchange($settings);
-$jsonraw       =  $twitter->setGetfield($getfield)
-						  ->buildOauth($url, $requestMethod)
-					 	  ->performRequest();
+// echo '<pre>';
+// print_r($json['statuses']);
+// echo '</pre>';
 
-$json = json_decode( $jsonraw );
 
-echo '<pre>';
-print_r($json);
-echo '</pre>';
+function get_all_permalinks() {
+	$args = array(
+		'posts_per_page' => -1,
+		'post_type'		 => 'any',
+	);
+	$all_posts_query = new WP_Query( $args );
+	$all_permalinks = array();
+	// Get all the permalinks and store them.
+	while( $all_posts_query->have_posts() ) {
+		$all_posts_query->the_post();
+		$post_id = $all_posts_query->post->ID;
+		array_push($all_permalinks, get_permalink( $post_id ));
+	}
+	wp_reset_postdata();// Restore original Post Data.
+	print_r($all_permalinks);
+}
+// add_action('init', 'get_all_permalinks');
