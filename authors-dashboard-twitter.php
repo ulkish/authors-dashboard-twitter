@@ -89,9 +89,11 @@ function test_rewrite_catch_stats() {
 			'title'     => $post->post_title,
 			'content'   => $post->post_content
 		);
-		header('Content-Type: text/plain');
-		print_r($out);
-		exit();
+
+
+		add_filter( 'template_include', function() {
+            return plugin_dir_path( __FILE__ ) . '/stats-page.php';
+        });
 	}
 }
 
