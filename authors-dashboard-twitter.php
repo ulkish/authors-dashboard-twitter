@@ -31,30 +31,53 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // - Get data. [DONE]
 // - Display the data in a comprehensible way.
 
+
+require_once('app-credentials.php');
 // Load the Twitter API wrapper.
 require_once('TwitterAPIExchange.php');
 
-$settings = array(
-	'oauth_access_token'        => "1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0",
-	'oauth_access_token_secret' => "tx4utCFkiByfIvrj7JIcgfrpPIjx9PN7hRsRVKAEyoUaQ",
-	'consumer_key'              => "pHRdhG7rYPWGZ3TTkHecozPfa",
-	'consumer_secret'           => "xU0AwSLGGcUrRIIp6zd46ovq3YtPCC8hcaj1gk1L36u74iJ5Jk"
-);
 
 // Creating a request.
-$url            = 'https://api.twitter.com/1.1/search/tweets.json';
-$get_field      = '?q=http%3A%2F%2Flocalhost%2Ftestinginstall%2Ftest-post-3%2F&src=typed_query';
-$request_method = 'GET';
-// $twitter       = new TwitterAPIExchange($settings);
-// $jsonraw       =  $twitter->setGetfield($get_field)
-// 						  ->buildOauth($url, $request_method)
-// 					 	  ->performRequest();
-// $json = json_decode( $jsonraw, true );
+function create_twitter_request( $search, $app_credentials ) {
+	$url            = 'https://api.twitter.com/1.1/search/tweets.json';
+	$get_field      = '?q=' . $search . '&tweet_mode=extended';
+	$request_method = 'GET';
+	$twitter        = new TwitterAPIExchange($app_credentials);
+	$json_raw       =  $twitter->setGetfield($get_field)
+							   ->buildOauth($url, $request_method)
+						 	   ->performRequest();
+	$results = json_decode( $json_raw, true );
+	return $results;
+}
 
-// echo '<pre>';
-// print_r($json['statuses']);
-// echo '</pre>';
+$results = create_twitter_request( 'sapiens.org', $app_credentials );
+$url_mentions = find_url_mentions( $results );
+echo '<pre>';
+print_r($url_mentions);
+echo '</pre>';
 
+// TODO: This function should return an array of tweets, each containing
+// the found URL and the full text.
+function find_url_mentions( $results ) {
+	$url_regex = '@((https?://)?([-\\w]+\\.[-\\w\\.]+)+\\w(:\\d+)?(/([-\\w/_\\.]*(\\?\\S+)?)?)*)@';
+	$tweets = array();
+	foreach ($results['statuses'] as $result) {
+		// print_r($result['full_text']);
+		$tweet = array();
+		$tweet['full_text'] = $result['full_text'];
+		if (preg_match($url_regex, $result['full_text'], $matches)) {
+			// $real_url = get_real_url($matches[0]);
+			$tweet['url'] = $matches[0];
+		}
+		array_push($tweets, $tweet);
+	}
+	return $tweets;
+}
+
+function get_real_url( $short_url ) {
+	$short_url_headers = get_headers($short_url , true);
+	return $short_url_headers['Location'];
+}
 
 function get_all_permalinks() {
 	$args = array(
@@ -70,35 +93,37 @@ function get_all_permalinks() {
 		array_push($all_permalinks, get_permalink( $post_id ));
 	}
 	wp_reset_postdata();// Restore original Post Data.
-	print_r($all_permalinks);
+	return $all_permalinks;
 }
 // add_action('init', 'get_all_permalinks');
 
 // Adding rewrites. The code below only takes effect after flushing the
 // rewrite rules.
-add_action( 'init', 'test_rewrite_add_rewrites' );
-function test_rewrite_add_rewrites() {
-	add_rewrite_endpoint( 'stats', EP_PERMALINK );
+add_action( 'init', 'stats_endpoint_init' );
+add_action( 'template_include', 'stats_endpoint_template_include' );
+/**
+ * Add our new stats endpoint
+ */
+function stats_endpoint_init(){
+	add_rewrite_endpoint( 'stats', EP_PERMALINK | EP_PAGES );
 }
-
-add_action( 'template_redirect', 'test_rewrite_catch_stats' );
-function test_rewrite_catch_stats() {
-	if( is_singular() && get_query_var( 'stats' ) ) {
-	   $post = get_queried_object();
-		$out = array(
-			'title'     => $post->post_title,
-			'content'   => $post->post_content
-		);
-
-
-		add_filter( 'template_include', function() {
-            return plugin_dir_path( __FILE__ ) . '/stats-page.php';
-        });
+/**
+ * Respond to our new endpoint
+ *
+ * @param $template
+ *
+ * @return mixed
+ */
+function stats_endpoint_template_include( $template ){
+	global $wp_query;
+	// since the "stats" query variable does not require a value, we need to
+	// check for its existence
+	if ( is_singular() && isset( $wp_query->query_vars['stats'] ) ) {
+		$post = get_post();
+		print_r($post);
+		plugin_dir_path( __FILE__ ) . '/stats-page.php';
 	}
+	return $template;
 }
 
-add_filter( 'request', 'test_rewrite_filter_request' );
-function test_rewrite_filter_request( $vars ) {
-	if( isset( $vars['stats'] ) ) $vars['stats'] = true;
-	return $vars;
-}
+
