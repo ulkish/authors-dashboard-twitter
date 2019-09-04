@@ -56,25 +56,29 @@ echo '<pre>';
 print_r($url_mentions);
 echo '</pre>';
 
-// TODO: This function should return an array of tweets, each containing
-// the found URL and the full text.
+// Returns an array of tweets, each containing the found URL and the full text.
 function find_url_mentions( $results ) {
 	$url_regex = '@((https?://)?([-\\w]+\\.[-\\w\\.]+)+\\w(:\\d+)?(/([-\\w/_\\.]*(\\?\\S+)?)?)*)@';
 	$tweets = array();
 	foreach ($results['statuses'] as $result) {
-		// print_r($result['full_text']);
 		$tweet = array();
-		$tweet['full_text'] = $result['full_text'];
-		if (preg_match($url_regex, $result['full_text'], $matches)) {
-			// $real_url = get_real_url($matches[0]);
-			$tweet['url'] = $matches[0];
+		// If it's an original tweet.
+		if (!isset($result['retweeted_status'])) {
+			// If it contains an URL.
+			if (preg_match($url_regex, $result['full_text'], $matches)) {
+				$real_url = expand_url($matches[1]);
+				$tweet = array( 'full_text' => $result['full_text'],
+								'id'        => $result['id'],
+								'url'       => $real_url,
+				);
+				array_push( $tweets, $tweet );
+			}
 		}
-		array_push($tweets, $tweet);
 	}
 	return $tweets;
 }
 
-function get_real_url( $short_url ) {
+function expand_url( $short_url ) {
 	$short_url_headers = get_headers($short_url , true);
 	return $short_url_headers['Location'];
 }
