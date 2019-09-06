@@ -29,9 +29,15 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // TODO LIST:
 // - Add the Twitter API. [DONE]
 // - Get data. [DONE]
-// - Display the data in a comprehensible way.
+// - Display the data in a comprehensible way. [DONE]
+// - Start thinking about this plugin's architecture and its integration
+// with the Authors Dashboard plugin.
+// - Fix Twitter query since at the time it only shows tweets from (apparently)
+// the last 24hs or so.
+// - Improve Twitter query efficiency, it takes 5~7 segs to complete at current
+// speed.
 
-
+// Load private credentials.
 require_once('app-credentials.php');
 // Load the Twitter API wrapper.
 require_once('TwitterAPIExchange.php');
@@ -56,31 +62,50 @@ echo '<pre>';
 print_r($url_mentions);
 echo '</pre>';
 
-// Returns an array of tweets, each containing the found URL and the full text.
+// Returns an array of tweets, each containing a list of found
+// URLs and the full text.
 function find_url_mentions( $results ) {
-	$url_regex = '@((https?://)?([-\\w]+\\.[-\\w\\.]+)+\\w(:\\d+)?(/([-\\w/_\\.]*(\\?\\S+)?)?)*)@';
+	// TODO: Make this whole "check if url" thing a function!
+	$url_regex = "/(?i)\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))/";
 	$tweets = array();
-	foreach ($results['statuses'] as $result) {
+	foreach ( $results['statuses'] as $result ) {
 		$tweet = array();
 		// If it's an original tweet.
-		if (!isset($result['retweeted_status'])) {
-			// If it contains an URL.
-			if (preg_match($url_regex, $result['full_text'], $matches)) {
-				$real_url = expand_url($matches[1]);
-				$tweet = array( 'full_text' => $result['full_text'],
-								'id'        => $result['id'],
-								'url'       => $real_url,
+		if ( !isset( $result['retweeted_status'] ) ) {
+			// If it contains URLs.
+			if ( preg_match_all( $url_regex, $result['full_text'], $matches ) ) {
+				$url_targets = array();
+				foreach( $matches[0] as $short_url ) {
+					if ( $expanded_url = expand_url($short_url) ) {
+						array_push($url_targets, $expanded_url);
+					}
+				}
+				if ( !empty($url_targets) ) { // Is there an alternative to this?
+					$found_urls = $url_targets;
+				}
+				$tweet = array( 'full_text'   => $result['full_text'],
+								'id'          => $result['id'],
+								'urls'        => $matches[0],
+								'url_targets' => $found_urls,
+								'created_at'  => $result['created_at'],
+								'user'        => $result['user']['screen_name'],
 				);
-				array_push( $tweets, $tweet );
+				array_push( $tweets, $tweet ); // Show filtered tweets.
 			}
+			// array_push( $tweets, $result ); // Shows original tweets.
 		}
+		// array_push( $tweets, $result ); // Show all tweets.
 	}
 	return $tweets;
 }
 
 function expand_url( $short_url ) {
 	$short_url_headers = get_headers($short_url , true);
-	return $short_url_headers['Location'];
+	if(isset($short_url_headers['Location'])) { // Is there a shorter way?
+		return $short_url_headers['Location'];
+	} else{
+		return;
+	}
 }
 
 function get_all_permalinks() {
