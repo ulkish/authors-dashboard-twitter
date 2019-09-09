@@ -36,12 +36,20 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // the last 24hs or so.
 // - Improve Twitter query efficiency, it takes 5~7 segs to complete at current
 // speed.
+// - Not all tweets matching the search criteria are being returned by the API.
+// - Fix error regarding short urls not expanding.
 
 // Load private credentials.
 require_once('app-credentials.php');
 // Load the Twitter API wrapper.
 require_once('TwitterAPIExchange.php');
 
+// $results = create_twitter_request( 'sapiens.org', $app_credentials );
+// $url_mentions = find_url_mentions( $results );
+$permalinks = get_all_permalinks();
+echo '<pre>';
+print_r($permalinks);
+echo '</pre>';
 
 // Creating a request.
 function create_twitter_request( $search, $app_credentials ) {
@@ -56,11 +64,6 @@ function create_twitter_request( $search, $app_credentials ) {
 	return $results;
 }
 
-$results = create_twitter_request( 'sapiens.org', $app_credentials );
-$url_mentions = find_url_mentions( $results );
-echo '<pre>';
-print_r($url_mentions);
-echo '</pre>';
 
 // Returns an array of tweets, each containing a list of found
 // URLs and the full text.
@@ -72,7 +75,7 @@ function find_url_mentions( $results ) {
 		$tweet = array();
 		// If it's an original tweet.
 		if ( !isset( $result['retweeted_status'] ) ) {
-			// If it contains URLs.
+			// If it contains URLs (is this necessary?).
 			if ( preg_match_all( $url_regex, $result['full_text'], $matches ) ) {
 				$url_targets = array();
 				foreach( $matches[0] as $short_url ) {
@@ -80,7 +83,7 @@ function find_url_mentions( $results ) {
 						array_push($url_targets, $expanded_url);
 					}
 				}
-				if ( !empty($url_targets) ) { // Is there an alternative to this?
+				if ( !empty($url_targets) ) { // Unnecessary check?
 					$found_urls = $url_targets;
 				}
 				$tweet = array( 'full_text'   => $result['full_text'],
@@ -90,11 +93,11 @@ function find_url_mentions( $results ) {
 								'created_at'  => $result['created_at'],
 								'user'        => $result['user']['screen_name'],
 				);
-				array_push( $tweets, $tweet ); // Show filtered tweets.
+				array_push( $tweets, $tweet ); // Return filtered tweets.
 			}
-			// array_push( $tweets, $result ); // Shows original tweets.
+			// array_push( $tweets, $result ); // Return original tweets.
 		}
-		// array_push( $tweets, $result ); // Show all tweets.
+		// array_push( $tweets, $result ); // Return all tweets.
 	}
 	return $tweets;
 }
@@ -119,12 +122,27 @@ function get_all_permalinks() {
 	while( $all_posts_query->have_posts() ) {
 		$all_posts_query->the_post();
 		$post_id = $all_posts_query->post->ID;
-		array_push($all_permalinks, get_permalink( $post_id ));
+		array_push( $all_permalinks, $permalink = array(
+            'url' => get_permalink( $post_id ),
+            'post_id'   => $post_id,
+        ));
 	}
 	wp_reset_postdata();// Restore original Post Data.
 	return $all_permalinks;
 }
 // add_action('init', 'get_all_permalinks');
+
+// For each url mention, search through permalinks
+// for a match, if found, store it in the post meta.
+function store_url_mentions( $url_mentions ) {
+    $all_permalinks = get_all_permalinks();
+    foreach( $url_mentions['url_targets'][0] as $permalink ) {
+        if( in_array( $permalink, $all_permalinks ) ) {
+            update_post_meta( $permalink['post_id'], 'twitter_data', $twitter_data );
+        }
+    }
+}
+
 
 // Adding rewrites. The code below only takes effect after flushing the
 // rewrite rules.
