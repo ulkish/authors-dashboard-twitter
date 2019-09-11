@@ -23,67 +23,100 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.html
-*/
-
+ */
 
 // TODO LIST:
 // - Add the Twitter API. [DONE]
 // - Get data. [DONE]
 // - Display the data in a comprehensible way. [DONE]
+// - Fix error regarding short urls not expanding. [DONE]
 // - Start thinking about this plugin's architecture and its integration
 // with the Authors Dashboard plugin.
 // - Fix Twitter query since at the time it only shows tweets from (apparently)
-// the last 24hs or so.
+// the last 5hs or so.
 // - Improve Twitter query efficiency, it takes 5~7 segs to complete at current
 // speed.
-// - Not all tweets matching the search criteria are being returned by the API.
-// - Fix error regarding short urls not expanding.
+
 
 // Load private credentials.
-require_once('app-credentials.php');
-// Load the Twitter API wrapper.
-require_once('TwitterAPIExchange.php');
+// require_once('app-credentials.php');
+// // Load the Twitter API wrapper.
+// require_once('TwitterAPIExchange.php');
 
-// $results = create_twitter_request( 'sapiens.org', $app_credentials );
+// $results = create_twitter_request( 'http://localhost/testinginstall/test-post-3/', $app_credentials );
 // $url_mentions = find_url_mentions( $results );
-$permalinks = get_all_permalinks();
-echo '<pre>';
-print_r($permalinks);
-echo '</pre>';
+// store_url_mentions( $url_mentions );
+// echo '<pre>';
+// print_r( get_post_meta( 9, 'twitter_data' ) );
+// echo '</pre>';
 
-// Creating a request.
+/**
+ * Shows final data found with this plugin.
+ *
+ * @return void
+ */
+function show_post_twitter_data() {
+	// Load private credentials.
+	require_once 'app-credentials.php';
+	// Load the Twitter API wrapper.
+	require_once 'TwitterAPIExchange.php';
+	$results      = create_twitter_request( 'http://localhost/testinginstall/test-post-3/', $app_credentials );
+	$url_mentions = find_url_mentions( $results );
+	store_url_mentions( $url_mentions );
+	$post_tweet_meta = get_post_meta( 9, 'twitter_data' );
+	if ( isset( $post_tweet_meta ) ) {
+		print_r( $post_tweet_meta );
+	}
+}
+add_action( 'init', 'show_post_twitter_data' );
+
+
+/**
+ * Searches Twitter for all Tweets containing a specific
+ * string.
+ *
+ * @param  string $search Target.
+ * @param  array  $app_credentials Access tokens, keys, secret.
+ * @return array  $results All Tweets found.
+ */
 function create_twitter_request( $search, $app_credentials ) {
 	$url            = 'https://api.twitter.com/1.1/search/tweets.json';
 	$get_field      = '?q=' . $search . '&tweet_mode=extended';
 	$request_method = 'GET';
-	$twitter        = new TwitterAPIExchange($app_credentials);
-	$json_raw       =  $twitter->setGetfield($get_field)
-							   ->buildOauth($url, $request_method)
-						 	   ->performRequest();
-	$results = json_decode( $json_raw, true );
+	$twitter        = new TwitterAPIExchange( $app_credentials );
+	$json_raw       = $twitter->setGetfield( $get_field )
+								->buildOauth( $url, $request_method )
+								->performRequest();
+	$results        = json_decode( $json_raw, true );
 	return $results;
 }
 
 
-// Returns an array of tweets, each containing a list of found
-// URLs and the full text.
+/**
+ * Searches through Twitter for a specific URL, stores
+ * Tweets containing it.
+ *
+ * @param array $results All Tweets found.
+ * @return array $tweets All Tweets found.
+ */
 function find_url_mentions( $results ) {
 	// TODO: Make this whole "check if url" thing a function!
 	$url_regex = "/(?i)\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))/";
-	$tweets = array();
+	$tweets    = array();
 	foreach ( $results['statuses'] as $result ) {
 		$tweet = array();
 		// If it's an original tweet.
-		if ( !isset( $result['retweeted_status'] ) ) {
+		if ( ! isset( $result['retweeted_status'] ) ) {
 			// If it contains URLs (is this necessary?).
 			if ( preg_match_all( $url_regex, $result['full_text'], $matches ) ) {
 				$url_targets = array();
-				foreach( $matches[0] as $short_url ) {
-					if ( $expanded_url = expand_url($short_url) ) {
-						array_push($url_targets, $expanded_url);
+				foreach ( $matches[0] as $short_url ) {
+					$expanded_url = expand_url( $short_url );
+					if ( $expanded_url ) {
+						array_push( $url_targets, $expanded_url );
 					}
 				}
-				if ( !empty($url_targets) ) { // Unnecessary check?
+				if ( ! empty( $url_targets ) ) { // Unnecessary check?
 					$found_urls = $url_targets;
 				}
 				$tweet = array( 'full_text'   => $result['full_text'],
@@ -102,45 +135,53 @@ function find_url_mentions( $results ) {
 	return $tweets;
 }
 
+/**
+ * Expands tiny URLs found in Tweets.
+ *
+ * @param string $short_url Tiny URL.
+ * @return string $url Expanded URL
+ */
 function expand_url( $short_url ) {
-	$short_url_headers = get_headers($short_url , true);
-	if(isset($short_url_headers['Location'])) { // Is there a shorter way?
-		return $short_url_headers['Location'];
-	} else{
+	$short_url_headers = get_headers( $short_url, true );
+	if ( isset( $short_url_headers['Location'] ) ) { // Is there a shorter way?
+		// Removes anchor tag.
+		$url = strtok( $short_url_headers['Location'], '#' );
+		return $url;
+	} else {
 		return;
 	}
 }
 
-function get_all_permalinks() {
-	$args = array(
+
+/**
+ * For each URL mention search through permalinks for
+ * a match, if found store it in the post meta.
+ *
+ * @param array $url_mentions Mentions found.
+ * @return void
+ */
+function store_url_mentions( $url_mentions ) {
+	$args            = array(
 		'posts_per_page' => -1,
-		'post_type'		 => 'any',
+		'post_type'      => 'any',
 	);
 	$all_posts_query = new WP_Query( $args );
-	$all_permalinks = array();
-	// Get all the permalinks and store them.
-	while( $all_posts_query->have_posts() ) {
+
+	print_r( $url_mentions );
+	while ( $all_posts_query->have_posts() ) {
 		$all_posts_query->the_post();
-		$post_id = $all_posts_query->post->ID;
-		array_push( $all_permalinks, $permalink = array(
-            'url' => get_permalink( $post_id ),
-            'post_id'   => $post_id,
-        ));
+		$post_id   = $all_posts_query->post->ID;
+		$permalink = get_permalink( $post_id );
+
+		echo 'While loop working correctly.';
+		foreach ( $url_mentions as $url_mention ) {
+			echo 'Foreach working correctly.';
+			if ( $url_mention['url_targets'][0] === $permalink ) {
+				echo 'If statement worked.';
+			}
+		}
 	}
 	wp_reset_postdata();// Restore original Post Data.
-	return $all_permalinks;
-}
-// add_action('init', 'get_all_permalinks');
-
-// For each url mention, search through permalinks
-// for a match, if found, store it in the post meta.
-function store_url_mentions( $url_mentions ) {
-    $all_permalinks = get_all_permalinks();
-    foreach( $url_mentions['url_targets'][0] as $permalink ) {
-        if( in_array( $permalink, $all_permalinks ) ) {
-            update_post_meta( $permalink['post_id'], 'twitter_data', $twitter_data );
-        }
-    }
 }
 
 
@@ -151,23 +192,23 @@ add_action( 'template_include', 'stats_endpoint_template_include' );
 /**
  * Add our new stats endpoint
  */
-function stats_endpoint_init(){
+function stats_endpoint_init() {
 	add_rewrite_endpoint( 'stats', EP_PERMALINK | EP_PAGES );
 }
 /**
  * Respond to our new endpoint
  *
- * @param $template
+ * @param mixed $template No idea.
  *
  * @return mixed
  */
-function stats_endpoint_template_include( $template ){
+function stats_endpoint_template_include( $template ) {
 	global $wp_query;
-	// since the "stats" query variable does not require a value, we need to
-	// check for its existence
+	// Since the "stats" query variable does not require a value, we need to
+	// check for its existence.
 	if ( is_singular() && isset( $wp_query->query_vars['stats'] ) ) {
 		$post = get_post();
-		print_r($post);
+		print_r( $post );
 		plugin_dir_path( __FILE__ ) . '/stats-page.php';
 	}
 	return $template;
