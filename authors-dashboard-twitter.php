@@ -1,5 +1,5 @@
 <?php
-/*
+/**
 Plugin Name:       Authors Dashboard - Twitter
 Plugin URI:        https://tipit.net/
 Description:       Display Twitter data.
@@ -23,6 +23,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.html
+
+@package Authors Dashboard Twitter
  */
 
 // TODO LIST:
@@ -30,6 +32,7 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // - Get data. [DONE]
 // - Display the data in a comprehensible way. [DONE]
 // - Fix error regarding short urls not expanding. [DONE]
+// - Check rate limit for Twitter data requests.
 // - Start thinking about this plugin's architecture and its integration
 // with the Authors Dashboard plugin.
 // - Fix Twitter query since at the time it only shows tweets from (apparently)
@@ -39,19 +42,19 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 
 
 // Load private credentials.
-// require_once('app-credentials.php');
-// // Load the Twitter API wrapper.
-// require_once('TwitterAPIExchange.php');
+require_once 'app-credentials.php';
+// Load the Twitter API wrapper.
+require_once 'TwitterAPIExchange.php';
 
-// $results = create_twitter_request( 'http://localhost/testinginstall/test-post-3/', $app_credentials );
-// $url_mentions = find_url_mentions( $results );
+$results = create_twitter_request( 'www.sapiens.org', $app_credentials );
+$url_mentions = find_url_mentions( $results );
+print_r( $url_mentions );
+// print_r( expand_url( 'https://t.co/RoeKD8jcyf' ) );
+
 // store_url_mentions( $url_mentions );
-// echo '<pre>';
-// print_r( get_post_meta( 9, 'twitter_data' ) );
-// echo '</pre>';
 
 /**
- * Shows final data found with this plugin.
+ * Tests main functions of the plugin.
  *
  * @return void
  */
@@ -60,15 +63,13 @@ function show_post_twitter_data() {
 	require_once 'app-credentials.php';
 	// Load the Twitter API wrapper.
 	require_once 'TwitterAPIExchange.php';
-	$results      = create_twitter_request( 'http://localhost/testinginstall/test-post-3/', $app_credentials );
+	$results      = create_twitter_request( 'https://www.sapiens.org/', $app_credentials );
 	$url_mentions = find_url_mentions( $results );
 	store_url_mentions( $url_mentions );
 	$post_tweet_meta = get_post_meta( 9, 'twitter_data' );
-	if ( isset( $post_tweet_meta ) ) {
-		print_r( $post_tweet_meta );
-	}
+
 }
-add_action( 'init', 'show_post_twitter_data' );
+// The above function needs to be attached to a hook like 'init'.
 
 
 /**
@@ -93,14 +94,14 @@ function create_twitter_request( $search, $app_credentials ) {
 
 
 /**
- * Searches through Twitter for a specific URL, stores
+ * Searches through Twitter data for a specific URL, stores
  * Tweets containing it.
  *
  * @param array $results All Tweets found.
- * @return array $tweets All Tweets found.
+ * @return array $tweets Formatted Tweets.
  */
 function find_url_mentions( $results ) {
-	// TODO: Make this whole "check if url" thing a function!
+	// TODO: Make this whole "check if url" thing a function.
 	$url_regex = "/(?i)\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))/";
 	$tweets    = array();
 	foreach ( $results['statuses'] as $result ) {
@@ -112,48 +113,69 @@ function find_url_mentions( $results ) {
 				$url_targets = array();
 				foreach ( $matches[0] as $short_url ) {
 					$expanded_url = expand_url( $short_url );
-					if ( $expanded_url ) {
+					if ( ! empty( $expanded_url ) ) {
 						array_push( $url_targets, $expanded_url );
 					}
 				}
 				if ( ! empty( $url_targets ) ) { // Unnecessary check?
 					$found_urls = $url_targets;
 				}
-				$tweet = array( 'full_text'   => $result['full_text'],
-								'id'          => $result['id'],
-								'urls'        => $matches[0],
-								'url_targets' => $found_urls,
-								'created_at'  => $result['created_at'],
-								'user'        => $result['user']['screen_name'],
+				$tweet = array(
+					'full_text'   => $result['full_text'],
+					'id'          => $result['id'],
+					'urls'        => $matches[0],
+					'url_targets' => $found_urls,
+					'created_at'  => $result['created_at'],
+					'user'        => $result['user']['screen_name'],
 				);
 				array_push( $tweets, $tweet ); // Return filtered tweets.
+
 			}
-			// array_push( $tweets, $result ); // Return original tweets.
 		}
-		// array_push( $tweets, $result ); // Return all tweets.
 	}
 	return $tweets;
 }
 
+
 /**
  * Expands tiny URLs found in Tweets.
+ * TODO: Discard Twitter URLs, make this function recursive.
  *
  * @param string $short_url Tiny URL.
- * @return string $url Expanded URL
+ * @return string $url Expanded URL.
  */
 function expand_url( $short_url ) {
 	$short_url_headers = get_headers( $short_url, true );
-	if ( isset( $short_url_headers['Location'] ) ) { // Is there a shorter way?
-		// Removes anchor tag.
-		$url = strtok( $short_url_headers['Location'], '#' );
-		return $url;
+	$site_url          = 'https://www.sapiens.org';
+	// $site_url = get_site_url();
+	if ( isset( $short_url_headers['Location'] ) ) {
+		$location = $short_url_headers['Location'];
+	} elseif ( isset( $short_url_headers['location'] ) ) {
+		$location = $short_url_headers['location'];
 	} else {
-		return;
+		return $short_url;
+	}
+
+	if ( is_array( $location ) ) {
+		foreach ( $location as $location ) {
+			return expand_url( $url );
+		}
+	} elseif ( is_string( $location ) ) {
+		if ( strpos( $location, $site_url ) !== false ) {
+			// Removes anchor tag.
+			$url = strtok( $location, '#' );
+			return $url;
+		} else {
+			return null;
+		}
+	} else {
+		return null;
 	}
 }
 
 
 /**
+ * TODO: Copy the store_page_views() function.
  * For each URL mention search through permalinks for
  * a match, if found store it in the post meta.
  *
@@ -167,23 +189,19 @@ function store_url_mentions( $url_mentions ) {
 	);
 	$all_posts_query = new WP_Query( $args );
 
-	print_r( $url_mentions );
 	while ( $all_posts_query->have_posts() ) {
 		$all_posts_query->the_post();
 		$post_id   = $all_posts_query->post->ID;
 		$permalink = get_permalink( $post_id );
 
-		echo 'While loop working correctly.';
 		foreach ( $url_mentions as $url_mention ) {
-			echo 'Foreach working correctly.';
 			if ( $url_mention['url_targets'][0] === $permalink ) {
-				echo 'If statement worked.';
+				echo 'Link stored: ' . $permalink . '<br>';
 			}
 		}
 	}
-	wp_reset_postdata();// Restore original Post Data.
+	//wp_reset_postdata();// Restore original Post Data.
 }
-
 
 // Adding rewrites. The code below only takes effect after flushing the
 // rewrite rules.
@@ -198,9 +216,9 @@ function stats_endpoint_init() {
 /**
  * Respond to our new endpoint
  *
- * @param mixed $template No idea.
+ * @param mixed $template Template.
  *
- * @return mixed
+ * @return mixed $template Modified template.
  */
 function stats_endpoint_template_include( $template ) {
 	global $wp_query;
@@ -208,10 +226,7 @@ function stats_endpoint_template_include( $template ) {
 	// check for its existence.
 	if ( is_singular() && isset( $wp_query->query_vars['stats'] ) ) {
 		$post = get_post();
-		print_r( $post );
 		plugin_dir_path( __FILE__ ) . '/stats-page.php';
 	}
 	return $template;
 }
-
-
