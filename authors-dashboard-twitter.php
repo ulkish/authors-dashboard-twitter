@@ -32,6 +32,7 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // - Get data. [DONE]
 // - Display the data in a comprehensible way. [DONE]
 // - Fix error regarding short urls not expanding. [DONE]
+// - Create results data and store it in order to test the displaying of it.
 // - Check rate limit for Twitter data requests.
 // - Start thinking about this plugin's architecture and its integration
 // with the Authors Dashboard plugin.
@@ -46,10 +47,9 @@ require_once 'app-credentials.php';
 // Load the Twitter API wrapper.
 require_once 'TwitterAPIExchange.php';
 
-$results = create_twitter_request( 'www.sapiens.org', $app_credentials );
+$results = create_twitter_request( get_site_url(), $app_credentials );
 $url_mentions = find_url_mentions( $results );
-print_r( $url_mentions );
-// print_r( expand_url( 'https://t.co/RoeKD8jcyf' ) );
+// print_r( $url_mentions );
 
 // store_url_mentions( $url_mentions );
 
@@ -138,16 +138,15 @@ function find_url_mentions( $results ) {
 
 
 /**
- * Expands tiny URLs found in Tweets.
- * TODO: Discard Twitter URLs, make this function recursive.
+ * Expands tiny URLs found in Tweets, makes sure its related to
+ * the site (and not a Twitter link) then returns it.
  *
  * @param string $short_url Tiny URL.
  * @return string $url Expanded URL.
  */
 function expand_url( $short_url ) {
 	$short_url_headers = get_headers( $short_url, true );
-	$site_url          = 'https://www.sapiens.org';
-	// $site_url = get_site_url();
+	$site_url          = 'https://www.sapiens.org'; // $site_url = get_site_url();
 	if ( isset( $short_url_headers['Location'] ) ) {
 		$location = $short_url_headers['Location'];
 	} elseif ( isset( $short_url_headers['location'] ) ) {
@@ -196,37 +195,10 @@ function store_url_mentions( $url_mentions ) {
 
 		foreach ( $url_mentions as $url_mention ) {
 			if ( $url_mention['url_targets'][0] === $permalink ) {
-				echo 'Link stored: ' . $permalink . '<br>';
+				//echo 'Link stored: ' . $permalink . '<br>';
+				update_post_meta( $post_id, 'twitter_data', $url_mention );
 			}
 		}
 	}
-	//wp_reset_postdata();// Restore original Post Data.
-}
-
-// Adding rewrites. The code below only takes effect after flushing the
-// rewrite rules.
-add_action( 'init', 'stats_endpoint_init' );
-add_action( 'template_include', 'stats_endpoint_template_include' );
-/**
- * Add our new stats endpoint
- */
-function stats_endpoint_init() {
-	add_rewrite_endpoint( 'stats', EP_PERMALINK | EP_PAGES );
-}
-/**
- * Respond to our new endpoint
- *
- * @param mixed $template Template.
- *
- * @return mixed $template Modified template.
- */
-function stats_endpoint_template_include( $template ) {
-	global $wp_query;
-	// Since the "stats" query variable does not require a value, we need to
-	// check for its existence.
-	if ( is_singular() && isset( $wp_query->query_vars['stats'] ) ) {
-		$post = get_post();
-		plugin_dir_path( __FILE__ ) . '/stats-page.php';
-	}
-	return $template;
+	wp_reset_postdata();// Restore original Post Data.
 }
