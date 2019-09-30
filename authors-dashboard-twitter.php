@@ -32,7 +32,6 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // - Get data. [DONE]
 // - Display the data in a comprehensible way. [DONE]
 // - Fix error regarding short urls not expanding. [DONE]
-// - Create results data and store it in order to test the displaying of it.
 // - Check rate limit for Twitter data requests.
 // - Start thinking about this plugin's architecture and its integration
 // with the Authors Dashboard plugin.
@@ -40,36 +39,18 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // the last 5hs or so.
 // - Improve Twitter query efficiency, it takes 5~7 segs to complete at current
 // speed.
-
+// Test if adding ' -RT' at the end of the search URL excludes retweets.
 
 // Load private credentials.
-require_once 'app-credentials.php';
+require_once 'twitter-app-credentials.php';
 // Load the Twitter API wrapper.
 require_once 'TwitterAPIExchange.php';
 
-$results = create_twitter_request( get_site_url(), $app_credentials );
+$results      = create_twitter_request( 'www.sapiens.org', $app_credentials );
 $url_mentions = find_url_mentions( $results );
-// print_r( $url_mentions );
+print_r( $url_mentions );
 
 // store_url_mentions( $url_mentions );
-
-/**
- * Tests main functions of the plugin.
- *
- * @return void
- */
-function show_post_twitter_data() {
-	// Load private credentials.
-	require_once 'app-credentials.php';
-	// Load the Twitter API wrapper.
-	require_once 'TwitterAPIExchange.php';
-	$results      = create_twitter_request( 'https://www.sapiens.org/', $app_credentials );
-	$url_mentions = find_url_mentions( $results );
-	store_url_mentions( $url_mentions );
-	$post_tweet_meta = get_post_meta( 9, 'twitter_data' );
-
-}
-// The above function needs to be attached to a hook like 'init'.
 
 
 /**
@@ -101,9 +82,9 @@ function create_twitter_request( $search, $app_credentials ) {
  * @return array $tweets Formatted Tweets.
  */
 function find_url_mentions( $results ) {
-	// TODO: Make this whole "check if url" thing a function.
-	$url_regex = "/(?i)\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))/";
-	$tweets    = array();
+	$url_regex   = "/(?i)\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))/";
+	$tweets      = array();
+	$shared_urls = array();
 	foreach ( $results['statuses'] as $result ) {
 		$tweet = array();
 		// If it's an original tweet.
@@ -127,10 +108,30 @@ function find_url_mentions( $results ) {
 					'url_targets' => $found_urls,
 					'created_at'  => $result['created_at'],
 					'user'        => $result['user']['screen_name'],
+					'url_count'   => 0,
 				);
 				array_push( $tweets, $tweet ); // Return filtered tweets.
-
 			}
+		}
+	}
+	// Counting total times a URL was shared.
+	foreach ( $tweets as $tweet ) {
+		// If it contains more than 1 URL, get them all.
+		if ( is_array( $tweet['url_targets'] ) ) {
+			foreach ( $tweet['url_targets'] as $url ) {
+				array_push( $shared_urls, $url );
+			}
+		} else {
+			array_push( $shared_urls, $tweet['url_targets'] );
+		}
+	}
+	$shared_urls_count = array_count_values( $shared_urls );
+	// Adding a url value to each Tweet.
+	foreach ( $tweets as $tweet => $value ) {
+		// If an URL exists as as key in the $shared_url_counts array, change its
+		// 'url_count' value to the one found in it.
+		if ( array_key_exists( $value['url_targets'][0], $shared_urls_count ) ) {
+			$tweets[ $tweet ]['url_count'] = $shared_urls_count[ $value['url_targets'][0] ];
 		}
 	}
 	return $tweets;
@@ -174,7 +175,7 @@ function expand_url( $short_url ) {
 
 
 /**
- * TODO: Copy the store_page_views() function.
+ * TODO: Copy the store_page_views() functionality.
  * For each URL mention search through permalinks for
  * a match, if found store it in the post meta.
  *
