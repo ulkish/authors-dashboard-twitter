@@ -42,16 +42,27 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
 // Test if adding ' -RT' at the end of the search URL excludes retweets.
 
 // Load private credentials.
-require_once 'twitter-app-credentials.php';
+require_once __DIR__ . '/twitter-app-credentials.php';
 // Load the Twitter API wrapper.
-require_once 'TwitterAPIExchange.php';
+require_once __DIR__ . '/TwitterAPIExchange.php';
 
-$results      = create_twitter_request( 'www.sapiens.org', $app_credentials );
-$url_mentions = find_url_mentions( $results );
-print_r( $url_mentions );
-
+// $results      = create_twitter_request( 'www.sapiens.org', $app_credentials );
+// $url_mentions = find_url_mentions( $results );
+// print_r( $url_mentions );
 // store_url_mentions( $url_mentions );
 
+function get_and_store_twitter_data() {
+	$app_credentials = array(
+		'oauth_access_token'        => '1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0',
+		'oauth_access_token_secret' => 'tx4utCFkiByfIvrj7JIcgfrpPIjx9PN7hRsRVKAEyoUaQ',
+		'consumer_key'              => 'pHRdhG7rYPWGZ3TTkHecozPfa',
+		'consumer_secret'           => 'xU0AwSLGGcUrRIIp6zd46ovq3YtPCC8hcaj1gk1L36u74iJ5Jk',
+	);
+	$results         = create_twitter_request( 'www.sapiens.org', $app_credentials );
+	$url_mentions    = find_url_mentions( $results );
+	store_url_mentions( $url_mentions );
+}
+// add_action( 'init', 'get_and_store_twitter_data' );
 
 /**
  * Searches Twitter for all Tweets containing a specific
@@ -163,8 +174,9 @@ function expand_url( $short_url ) {
 	} elseif ( is_string( $location ) ) {
 		if ( strpos( $location, $site_url ) !== false ) {
 			// Removes anchor tag.
-			$url = strtok( $location, '#' );
-			return $url;
+			$anchorless_url    = strtok( $location, '#' );
+			$parameterless_url = strtok( $anchorless_url, '?' );
+			return $parameterless_url;
 		} else {
 			return null;
 		}
@@ -172,7 +184,6 @@ function expand_url( $short_url ) {
 		return null;
 	}
 }
-
 
 /**
  * TODO: Copy the store_page_views() functionality.
@@ -187,19 +198,38 @@ function store_url_mentions( $url_mentions ) {
 		'posts_per_page' => -1,
 		'post_type'      => 'any',
 	);
-	$all_posts_query = new WP_Query( $args );
-
-	while ( $all_posts_query->have_posts() ) {
-		$all_posts_query->the_post();
-		$post_id   = $all_posts_query->post->ID;
+	$all_posts_query = get_posts( $args );
+	foreach ( $all_posts_query as $post ) {
+		$post_id   = $post->ID;
 		$permalink = get_permalink( $post_id );
-
+		if ( strpos( $permalink, 'localhost' ) ) {
+			$permalink = str_replace(
+				'http://localhost/testinginstall',
+				'https://www.sapiens.org',
+				$permalink
+			);
+		}
 		foreach ( $url_mentions as $url_mention ) {
 			if ( $url_mention['url_targets'][0] === $permalink ) {
-				//echo 'Link stored: ' . $permalink . '<br>';
-				update_post_meta( $post_id, 'twitter_data', $url_mention );
+				$twitter_data       = get_post_meta( $post_id, 'twitter_data' );
+				$url_count          = get_post_meta( $post_id, 'tweet_count' );
+				$tweet_date_created = get_post_meta( $post_id, 'tweet_date_created' );
+				// If all Twitter data is not already set, add it. Else update it.
+				if ( ! isset( $twitter_data ) && ! isset( $url_count ) && ! isset( $tweet_date_created ) ) {
+					update_post_meta( $post_id, 'twitter_data', $url_mention );
+					update_post_meta( $post_id, 'tweet_count', $url_mention['url_count'] );
+					update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
+				} else {
+					// If the data we're getting is newer, add 1 to the saved Tweet count
+					// and update the last_modified date.
+					if ( $url_mention['created_at'] > $tweet_date_created[0] ) { // TODO: Comparing strings!
+						// echo $url_mention['created_at'] . ' is newer than ' .  $tweet_date_created[0];
+						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
+						update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
+					}
+				}
 			}
 		}
 	}
-	wp_reset_postdata();// Restore original Post Data.
+
 }
