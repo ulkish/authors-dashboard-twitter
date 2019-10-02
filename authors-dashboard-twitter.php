@@ -51,6 +51,7 @@ require_once __DIR__ . '/TwitterAPIExchange.php';
 // print_r( $url_mentions );
 // store_url_mentions( $url_mentions );
 
+
 function get_and_store_twitter_data() {
 	$app_credentials = array(
 		'oauth_access_token'        => '1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0',
@@ -62,7 +63,7 @@ function get_and_store_twitter_data() {
 	$url_mentions    = find_url_mentions( $results );
 	store_url_mentions( $url_mentions );
 }
-// add_action( 'init', 'get_and_store_twitter_data' );
+add_action( 'init', 'get_and_store_twitter_data' );
 
 /**
  * Searches Twitter for all Tweets containing a specific
@@ -117,7 +118,7 @@ function find_url_mentions( $results ) {
 					'id'          => $result['id'],
 					'urls'        => $matches[0],
 					'url_targets' => $found_urls,
-					'created_at'  => $result['created_at'],
+					'created_at'  => strtotime( $result['created_at'] ),
 					'user'        => $result['user']['screen_name'],
 					'url_count'   => 0,
 				);
@@ -222,8 +223,7 @@ function store_url_mentions( $url_mentions ) {
 				} else {
 					// If the data we're getting is newer, add 1 to the saved Tweet count
 					// and update the last_modified date.
-					if ( $url_mention['created_at'] > $tweet_date_created[0] ) { // TODO: Comparing strings!
-						// echo $url_mention['created_at'] . ' is newer than ' .  $tweet_date_created[0];
+					if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
 						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
 						update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
 					}
@@ -231,5 +231,4 @@ function store_url_mentions( $url_mentions ) {
 			}
 		}
 	}
-
 }
