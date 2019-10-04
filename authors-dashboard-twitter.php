@@ -28,30 +28,26 @@ along with Authors Dashboard. If not, see https://www.gnu.org/licenses/gpl-2.0.h
  */
 
 // TODO LIST:
-// - Add the Twitter API. [DONE]
-// - Get data. [DONE]
-// - Display the data in a comprehensible way. [DONE]
-// - Fix error regarding short urls not expanding. [DONE]
 // - Check rate limit for Twitter data requests.
 // - Start thinking about this plugin's architecture and its integration
 // with the Authors Dashboard plugin.
-// - Fix Twitter query since at the time it only shows tweets from (apparently)
-// the last 5hs or so.
-// - Improve Twitter query efficiency, it takes 5~7 segs to complete at current
-// speed.
-// Test if adding ' -RT' at the end of the search URL excludes retweets.
 
 // Load private credentials.
 require_once __DIR__ . '/twitter-app-credentials.php';
 // Load the Twitter API wrapper.
 require_once __DIR__ . '/TwitterAPIExchange.php';
 
-// $results      = create_twitter_request( 'www.sapiens.org', $app_credentials );
+// $results      = create_twitter_request( 'sapiens.org', $app_credentials );
 // $url_mentions = find_url_mentions( $results );
-// print_r( $url_mentions );
+// print_r( $results );
 // store_url_mentions( $url_mentions );
 
-
+/**
+ * Combines the main functions of the plugin into one for
+ * easier hooking into WP.
+ *
+ * @return void
+ */
 function get_and_store_twitter_data() {
 	$app_credentials = array(
 		'oauth_access_token'        => '1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0',
@@ -59,11 +55,11 @@ function get_and_store_twitter_data() {
 		'consumer_key'              => 'pHRdhG7rYPWGZ3TTkHecozPfa',
 		'consumer_secret'           => 'xU0AwSLGGcUrRIIp6zd46ovq3YtPCC8hcaj1gk1L36u74iJ5Jk',
 	);
-	$results         = create_twitter_request( 'www.sapiens.org', $app_credentials );
+	$results         = create_twitter_request( 'sapiens.org', $app_credentials );
 	$url_mentions    = find_url_mentions( $results );
 	store_url_mentions( $url_mentions );
 }
-add_action( 'init', 'get_and_store_twitter_data' );
+// add_action( 'init', 'get_and_store_twitter_data' ); // Uncomment this if you need to do some testing.
 
 /**
  * Searches Twitter for all Tweets containing a specific
@@ -75,7 +71,7 @@ add_action( 'init', 'get_and_store_twitter_data' );
  */
 function create_twitter_request( $search, $app_credentials ) {
 	$url            = 'https://api.twitter.com/1.1/search/tweets.json';
-	$get_field      = '?q=' . $search . '&tweet_mode=extended';
+	$get_field      = '?q=' . $search . '&src=typed_query&f=live';
 	$request_method = 'GET';
 	$twitter        = new TwitterAPIExchange( $app_credentials );
 	$json_raw       = $twitter->setGetfield( $get_field )
@@ -149,7 +145,6 @@ function find_url_mentions( $results ) {
 	return $tweets;
 }
 
-
 /**
  * Expands tiny URLs found in Tweets, makes sure its related to
  * the site (and not a Twitter link) then returns it.
@@ -158,6 +153,9 @@ function find_url_mentions( $results ) {
  * @return string $url Expanded URL.
  */
 function expand_url( $short_url ) {
+	if ( ! isset( $short_url ) ) {
+		return;
+	}
 	$short_url_headers = get_headers( $short_url, true );
 	$site_url          = 'https://www.sapiens.org'; // $site_url = get_site_url();
 	if ( isset( $short_url_headers['Location'] ) ) {
@@ -170,6 +168,9 @@ function expand_url( $short_url ) {
 
 	if ( is_array( $location ) ) {
 		foreach ( $location as $location ) {
+			if ( ! isset( $url ) ) {
+				return;
+			}
 			return expand_url( $url );
 		}
 	} elseif ( is_string( $location ) ) {
@@ -187,7 +188,6 @@ function expand_url( $short_url ) {
 }
 
 /**
- * TODO: Copy the store_page_views() functionality.
  * For each URL mention search through permalinks for
  * a match, if found store it in the post meta.
  *
@@ -203,9 +203,9 @@ function store_url_mentions( $url_mentions ) {
 	foreach ( $all_posts_query as $post ) {
 		$post_id   = $post->ID;
 		$permalink = get_permalink( $post_id );
-		if ( strpos( $permalink, 'localhost' ) ) {
+		if ( ! strpos( $permalink, 'https://www.sapiens.org' ) ) {
 			$permalink = str_replace(
-				'http://localhost/testinginstall',
+				get_site_url(),
 				'https://www.sapiens.org',
 				$permalink
 			);
