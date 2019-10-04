@@ -37,9 +37,9 @@ require_once __DIR__ . '/twitter-app-credentials.php';
 // Load the Twitter API wrapper.
 require_once __DIR__ . '/TwitterAPIExchange.php';
 
-// $results      = create_twitter_request( 'sapiens.org', $app_credentials );
-// $url_mentions = find_url_mentions( $results );
-// print_r( $results );
+$results      = create_twitter_request( 'sapiens.org', $app_credentials );
+$url_mentions = find_url_mentions( $results );
+print_r( $url_mentions );
 // store_url_mentions( $url_mentions );
 
 /**
@@ -71,7 +71,7 @@ function get_and_store_twitter_data() {
  */
 function create_twitter_request( $search, $app_credentials ) {
 	$url            = 'https://api.twitter.com/1.1/search/tweets.json';
-	$get_field      = '?q=' . $search . '&src=typed_query&f=live';
+	$get_field      = '?q=' . $search . '&tweet_mode=extended&src=typed_query&f=live';
 	$request_method = 'GET';
 	$twitter        = new TwitterAPIExchange( $app_credentials );
 	$json_raw       = $twitter->setGetfield( $get_field )
@@ -138,8 +138,10 @@ function find_url_mentions( $results ) {
 	foreach ( $tweets as $tweet => $value ) {
 		// If an URL exists as as key in the $shared_url_counts array, change its
 		// 'url_count' value to the one found in it.
-		if ( array_key_exists( $value['url_targets'][0], $shared_urls_count ) ) {
-			$tweets[ $tweet ]['url_count'] = $shared_urls_count[ $value['url_targets'][0] ];
+		foreach ( $value['url_targets'] as $url_target ) {
+			if ( array_key_exists( $url_target, $shared_urls_count ) ) {
+				$tweets[ $tweet ]['url_count'] = $shared_urls_count[ $url_target ];
+			}
 		}
 	}
 	return $tweets;
@@ -203,7 +205,8 @@ function store_url_mentions( $url_mentions ) {
 	foreach ( $all_posts_query as $post ) {
 		$post_id   = $post->ID;
 		$permalink = get_permalink( $post_id );
-		if ( ! strpos( $permalink, 'https://www.sapiens.org' ) ) {
+		// If sapiens.org is not found within the post permalink, add it.
+		if ( strpos( $permalink, 'https://www.sapiens.org' ) === false ) {
 			$permalink = str_replace(
 				get_site_url(),
 				'https://www.sapiens.org',
@@ -211,24 +214,27 @@ function store_url_mentions( $url_mentions ) {
 			);
 		}
 		foreach ( $url_mentions as $url_mention ) {
-			if ( $url_mention['url_targets'][0] === $permalink ) {
-				$twitter_data       = get_post_meta( $post_id, 'twitter_data' );
-				$url_count          = get_post_meta( $post_id, 'tweet_count' );
-				$tweet_date_created = get_post_meta( $post_id, 'tweet_date_created' );
-				// If all Twitter data is not already set, add it. Else update it.
-				if ( ! isset( $twitter_data ) && ! isset( $url_count ) && ! isset( $tweet_date_created ) ) {
-					update_post_meta( $post_id, 'twitter_data', $url_mention );
-					update_post_meta( $post_id, 'tweet_count', $url_mention['url_count'] );
-					update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
-				} else {
-					// If the data we're getting is newer, add 1 to the saved Tweet count
-					// and update the last_modified date.
-					if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
+			foreach ( $url_mention['url_targets'] as $url_target ) {
+				if ( $url_target === $permalink ) {
+					$twitter_data       = get_post_meta( $post_id, 'twitter_data' );
+					$url_count          = get_post_meta( $post_id, 'tweet_count' );
+					$tweet_date_created = get_post_meta( $post_id, 'tweet_date_created' );
+					// If all Twitter data is not already set, add it. Else update it.
+					if ( ! isset( $twitter_data ) && ! isset( $url_count ) && ! isset( $tweet_date_created ) ) {
+						update_post_meta( $post_id, 'twitter_data', $url_mention );
+						update_post_meta( $post_id, 'tweet_count', $url_mention['url_count'] );
 						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
-						update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
+					} else {
+						// If the data we're getting is newer, add 1 to the saved Tweet count
+						// and update the last_modified date.
+						if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
+							update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
+							update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
+						}
 					}
 				}
 			}
+
 		}
 	}
 }
