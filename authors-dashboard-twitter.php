@@ -41,9 +41,6 @@ require_once __DIR__ . '/TwitterAPIExchange.php';
 // $url_mentions = find_url_mentions( $results );
 // print_r( $url_mentions );
 // store_url_mentions( $url_mentions );
-
-print_r(get_post_meta(9));
-
 /**
  * Combines the main functions of the plugin into one for
  * easier hooking into WP.
@@ -218,13 +215,18 @@ function store_url_mentions( $url_mentions ) {
 		foreach ( $url_mentions as $url_mention ) {
 			foreach ( $url_mention['url_targets'] as $url_target ) {
 				if ( $url_target === $permalink ) {
-					$twitter_data       = get_post_meta( $post_id, 'twitter_data' );
+					$tweets_data        = get_post_meta( $post_id, 'tweets_data' );
 					$url_count          = get_post_meta( $post_id, 'tweet_count' );
 					$tweet_date_created = get_post_meta( $post_id, 'tweet_date_created' );
-					$tweets_ids         = get_post_meta( $post_id, 'tweets_ids' );
 					// If all Twitter data is not already set, add it. Else update it.
-					if ( empty( $twitter_data ) ) {
-						update_post_meta( $post_id, 'twitter_data', $url_mention );
+					if ( empty( $tweets_data ) ) {
+						$tweets_array = array();
+						$tweet_data   = array(
+							'id'   => $url_mention['id'],
+							'user' => $url_mention['user'],
+						);
+						array_push( $tweets_array, $tweet_data );
+						update_post_meta( $post_id, 'tweets_data', $tweets_array );
 					}
 					if ( empty( $url_count ) ) {
 						update_post_meta( $post_id, 'tweet_count', $url_mention['url_count'] );
@@ -232,19 +234,18 @@ function store_url_mentions( $url_mentions ) {
 					if ( empty( $tweet_date_created ) ) {
 						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
 					}
-					if ( empty( $tweets_ids ) ) {
-						$tweets_array = array();
-						array_push( $tweets_array, $url_mention['id'] );
-						update_post_meta( $post_id, 'tweets_ids', $tweets_array );
-					}
 					// If the Tweet we're getting is new, add 1 to the saved Tweet count,
 					// update the last_modified date and add the Tweet ID to the tweets array.
 					if ( ! empty( $tweet_date_created ) ) {
 						if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
 							update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
 							update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
-							$tweets_array = get_post_meta( $post_id, 'tweets_ids' );
-							array_push( $tweets_array, $url_mention['id'] );
+							$tweets_array = get_post_meta( $post_id, 'tweets_data' );
+							$tweet_data = array(
+								'id'   => $url_mention['id'],
+								'user' => $url_mention['user'],
+							);
+							array_push( $tweets_array, $tweet_data );
 							update_post_meta( $post_id, 'tweets_ids', $tweets_array );
 						}
 					}
