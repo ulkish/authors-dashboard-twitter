@@ -37,9 +37,9 @@ require_once __DIR__ . '/twitter-app-credentials.php';
 // Load the Twitter API wrapper.
 require_once __DIR__ . '/TwitterAPIExchange.php';
 
-$results      = create_twitter_request( 'sapiens.org', $app_credentials );
-$url_mentions = find_url_mentions( $results );
-print_r( $url_mentions );
+// $results      = create_twitter_request( 'sapiens.org', $app_credentials );
+// $url_mentions = find_url_mentions( $results );
+// print_r( $url_mentions );
 // store_url_mentions( $url_mentions );
 
 /**
@@ -219,22 +219,33 @@ function store_url_mentions( $url_mentions ) {
 					$twitter_data       = get_post_meta( $post_id, 'twitter_data' );
 					$url_count          = get_post_meta( $post_id, 'tweet_count' );
 					$tweet_date_created = get_post_meta( $post_id, 'tweet_date_created' );
+					$tweets_ids         = get_post_meta( $post_id, 'tweets_ids' );
 					// If all Twitter data is not already set, add it. Else update it.
-					if ( ! isset( $twitter_data ) && ! isset( $url_count ) && ! isset( $tweet_date_created ) ) {
+					if ( empty( $twitter_data ) ) {
 						update_post_meta( $post_id, 'twitter_data', $url_mention );
+					}
+					if ( empty( $url_count ) ) {
 						update_post_meta( $post_id, 'tweet_count', $url_mention['url_count'] );
+					}
+					if ( empty( $tweet_date_created ) ) {
 						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
-					} else {
-						// If the data we're getting is newer, add 1 to the saved Tweet count
-						// and update the last_modified date.
-						if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
-							update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
-							update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
-						}
+					}
+					if ( empty( $tweets_ids ) ) {
+						$tweets_array = array();
+						array_push( $tweets_array, $url_mention['id'] );
+						update_post_meta( $post_id, 'tweets_ids', $tweets_array );
+					}
+					// If the Tweet we're getting is new, add 1 to the saved Tweet count,
+					// update the last_modified date and add the Tweet ID to the tweets array.
+					if ( $url_mention['created_at'] > $tweet_date_created[0] ) {
+						update_post_meta( $post_id, 'tweet_date_created', $url_mention['created_at'] );
+						update_post_meta( $post_id, 'tweet_count', $url_count[0] + 1 );
+						$tweets_array = get_post_meta( $post_id, 'tweets_ids' );
+						array_push( $tweets_array, $url_mention['id'] );
+						update_post_meta( $post_id, 'tweets_ids', $tweets_array );
 					}
 				}
 			}
-
 		}
 	}
 }
