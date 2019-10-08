@@ -107,17 +107,17 @@ function find_url_mentions( $results ) {
 				}
 				if ( ! empty( $url_targets ) ) { // Unnecessary check?
 					$found_urls = $url_targets;
+					$tweet = array(
+						'full_text'   => $result['full_text'],
+						'id'          => $result['id'],
+						'urls'        => $matches[0],
+						'url_targets' => $found_urls,
+						'created_at'  => strtotime( $result['created_at'] ),
+						'user'        => $result['user']['screen_name'],
+						'url_count'   => 0,
+					);
+					array_push( $tweets, $tweet ); // Return filtered tweets.
 				}
-				$tweet = array(
-					'full_text'   => $result['full_text'],
-					'id'          => $result['id'],
-					'urls'        => $matches[0],
-					'url_targets' => $found_urls,
-					'created_at'  => strtotime( $result['created_at'] ),
-					'user'        => $result['user']['screen_name'],
-					'url_count'   => 0,
-				);
-				array_push( $tweets, $tweet ); // Return filtered tweets.
 			}
 		}
 	}
@@ -213,6 +213,7 @@ function store_url_mentions( $url_mentions ) {
 			);
 		}
 		foreach ( $url_mentions as $url_mention ) {
+			var_dump( $url_mention['url_targets'] );
 			foreach ( $url_mention['url_targets'] as $url_target ) {
 				if ( $url_target === $permalink ) {
 					$tweets_data        = get_post_meta( $post_id, 'tweets_data' );
