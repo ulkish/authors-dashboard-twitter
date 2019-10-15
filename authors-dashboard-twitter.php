@@ -65,14 +65,14 @@ function get_and_store_twitter_data() {
  * string.
  *
  * @param  string $search Target.
- * @param  array  $app_credentials Access tokens, keys, secret.
+ * @param  array  $twitter_credentials Access tokens, keys, secret.
  * @return array  $results All Tweets found.
  */
-function create_twitter_request( $search, $app_credentials ) {
+function create_twitter_request( $search, $twitter_credentials ) {
 	$url            = 'https://api.twitter.com/1.1/search/tweets.json';
 	$get_field      = '?q=' . $search . '&tweet_mode=extended&src=typed_query&f=live';
 	$request_method = 'GET';
-	$twitter        = new TwitterAPIExchange( $app_credentials );
+	$twitter        = new TwitterAPIExchange( $twitter_credentials );
 	$json_raw       = $twitter->setGetfield( $get_field )
 								->buildOauth( $url, $request_method )
 								->performRequest();

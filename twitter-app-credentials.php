@@ -5,7 +5,7 @@
  * @package Authors Dashboard Twitter
  */
 
-$app_credentials = array(
+$twitter_credentials = array(
 	'oauth_access_token'        => '1166074328800251906-1TfBHgEq3qrvSaEeSFSnL8vWFVjje0',
 	'oauth_access_token_secret' => 'tx4utCFkiByfIvrj7JIcgfrpPIjx9PN7hRsRVKAEyoUaQ',
 	'consumer_key'              => 'pHRdhG7rYPWGZ3TTkHecozPfa',
